@@ -1,2 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Windows-first files: check out with CRLF.
+*.sln text eol=crlf
+*.csproj text eol=crlf
+*.iss text eol=crlf
+*.props text eol=crlf
+*.xaml text
+*.cs text
+*.yml text

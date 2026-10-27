@@ -1,0 +1,38 @@
+## Build results
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+publish/
+artifacts/
+installer/Output/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.DotSettings.user
+
+## Test results
+[Tt]est[Rr]esult*/
+*.trx
+coverage*.json
+coverage*.xml
+*.coverage
+TestResults/
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+## OS junk
+.DS_Store
+Thumbs.db
+desktop.ini

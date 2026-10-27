@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <RootNamespace>Osoko</RootNamespace>
+    <AssemblyName>Osoko</AssemblyName>
+
+    <!-- WPF for the shelf UI, WinForms only for the tray icon / native dialogs. -->
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!-- WinForms + WPF implicit usings collide (Application, Timer, Clipboard, …).
+         GlobalUsings.cs declares exactly what Osoko needs. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\osoko.ico</ApplicationIcon>
+
+    <AssemblyTitle>Osoko</AssemblyTitle>
+    <Description>Osoko — a floating shelf for screenshots on Windows 10 and 11.</Description>
+    <AssemblyProduct>Osoko</AssemblyProduct>
+    <AssemblyCompany>Osoko</AssemblyCompany>
+    <AssemblyCopyright>Copyright © 2025 Osoko</AssemblyCopyright>
+
+    <!--
+      Single-file, self-contained publishing. These switches are inert during a
+      normal build/test and only take effect for `dotnet publish`.
+    -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+
+    <!-- WinRT projections (Windows.Media.Ocr) are supplied by the Windows SDK. -->
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <!-- We are a WPF app; the tray icon is the only WinForms usage and DPI is
+         configured through app.manifest (PerMonitorV2). -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- App.xaml lives under UI/ so it has to be registered explicitly. -->
+    <ApplicationDefinition Include="UI\App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Page Remove="UI\App.xaml" />
+    <None Remove="Assets\osoko-256.png" />
+    <Resource Include="Assets\osoko-256.png" />
+    <Resource Include="Assets\osoko.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Osoko.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Optimize>true</Optimize>
+    <PublishTrimmed>false</PublishTrimmed>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>
