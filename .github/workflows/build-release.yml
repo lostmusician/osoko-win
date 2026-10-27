@@ -1,0 +1,148 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "9.0.x"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  CONFIGURATION: Release
+
+jobs:
+  build:
+    name: Build, test & package
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~\.nuget\packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Build.props', '**/*.csproj', 'Osoko.sln') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore Osoko.sln
+
+      - name: Build
+        run: dotnet build Osoko.sln -c ${{ env.CONFIGURATION }} --no-restore -warnaserror
+
+      - name: Test
+        run: >
+          dotnet test tests\Osoko.Tests\Osoko.Tests.csproj
+          -c ${{ env.CONFIGURATION }}
+          --no-build
+          --logger "trx;LogFileName=osoko-tests.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+
+      - name: Publish self-contained single-file app
+        run: >
+          dotnet publish src\Osoko\Osoko.csproj
+          -c ${{ env.CONFIGURATION }}
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:PublishReadyToRun=true
+          -p:DebugType=embedded
+          -o publish\win-x64
+
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          $exe = "publish\win-x64\Osoko.exe"
+          if (-not (Test-Path $exe)) { throw "Osoko.exe was not produced." }
+          $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "Osoko.exe built: $size MB"
+
+      - name: Upload portable executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: osoko-win-x64-portable
+          path: publish\win-x64\Osoko.exe
+          if-no-files-found: error
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $version = $env:GITHUB_REF.Substring(11)
+          } else {
+            $version = "1.0.${{ github.run_number }}"
+          }
+          # The file version resource only accepts numeric components.
+          $numeric = ($version -replace "[^0-9.].*$", "").TrimEnd(".")
+          if ([string]::IsNullOrWhiteSpace($numeric)) { $numeric = "1.0.0" }
+          "value=$version" >> $env:GITHUB_OUTPUT
+          "numeric=$numeric" >> $env:GITHUB_OUTPUT
+          Write-Host "Installer version: $version (file version $numeric)"
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          & $iscc `
+            "installer\OsokoSetup.iss" `
+            "/DMyAppVersion=${{ steps.version.outputs.value }}" `
+            "/DMyAppVersionInfo=${{ steps.version.outputs.numeric }}" `
+            "/DPublishDir=..\publish\win-x64" `
+            "/DOutputDir=..\installer\Output"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed ($LASTEXITCODE)." }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: osoko-setup-x64
+          path: installer\Output\*.exe
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Osoko ${{ steps.version.outputs.value }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          files: |
+            installer/Output/OsokoSetup-*-x64.exe
+            publish/win-x64/Osoko.exe
