@@ -21,6 +21,7 @@ public sealed class SettingsManager
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        Converters = { new CardActionKindJsonConverter() },
     };
 
     private readonly Func<string?> _executablePathProvider;

@@ -2,22 +2,169 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:Osoko.UI.Converters"
+             xmlns:core="clr-namespace:Osoko.Core"
+             xmlns:local="clr-namespace:Osoko.UI.Controls"
              x:Name="CardRoot"
              Height="150"
-             Focusable="False"
+             Focusable="True"
+             FocusVisualStyle="{x:Null}"
              Background="Transparent"
              SnapsToDevicePixels="True"
              UseLayoutRounding="True"
+             TextOptions.TextFormattingMode="Display"
              MouseEnter="OnCardMouseEnter"
              MouseLeave="OnCardMouseLeave"
              PreviewMouseLeftButtonDown="OnPreviewMouseLeftButtonDown"
              PreviewMouseMove="OnPreviewMouseMove"
-             PreviewMouseLeftButtonUp="OnPreviewMouseLeftButtonUp">
+             PreviewMouseLeftButtonUp="OnPreviewMouseLeftButtonUp"
+             PreviewKeyDown="OnCardPreviewKeyDown"
+             KeyDown="OnCardPreviewKeyDown">
 
     <UserControl.Resources>
         <conv:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:BooleanToVisibilityConverter x:Key="InverseBoolToVisibility" Invert="True" />
     </UserControl.Resources>
+
+    <UserControl.ContextMenu>
+        <ContextMenu Style="{DynamicResource FluentContextMenuStyle}" Opened="OnContextMenuOpened">
+            <ContextMenu.Resources>
+                <Style TargetType="Separator" BasedOn="{StaticResource FluentMenuSeparatorStyle}" />
+            </ContextMenu.Resources>
+
+            <MenuItem Header="Copy 2x Original"
+                      InputGestureText="2"
+                      Tag="{x:Static core:CardActionKind.CopyOriginal}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8A5;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Copy 1x Downscaled"
+                      InputGestureText="1"
+                      Tag="{x:Static core:CardActionKind.CopyDownscaled}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8C8;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Copy Text (OCR)"
+                      InputGestureText="T"
+                      Tag="{x:Static core:CardActionKind.CopyOcr}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8D2;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Redact Sensitive Data"
+                      InputGestureText="R"
+                      Tag="{x:Static core:CardActionKind.RedactSensitive}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE72E;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+
+            <MenuItem x:Name="ContextOpenQrItem"
+                      Header="Open QR Code Link"
+                      InputGestureText="L"
+                      Visibility="Collapsed"
+                      Tag="{x:Static core:CardActionKind.OpenQrLink}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8A7;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem x:Name="ContextCopyQrItem"
+                      Header="Copy QR Code Link"
+                      Visibility="Collapsed"
+                      Tag="{x:Static core:CardActionKind.CopyQrLink}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE71B;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator x:Name="ContextQrSeparator" Visibility="Collapsed" />
+
+            <MenuItem Header="Save to Location"
+                      InputGestureText="S"
+                      Tag="{x:Static core:CardActionKind.SaveToFolder}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8B7;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Save As..."
+                      InputGestureText="Shift+S"
+                      Tag="{x:Static core:CardActionKind.SaveAs}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE74E;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Share..."
+                      Tag="{x:Static core:CardActionKind.Share}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE72D;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+
+            <Separator />
+
+            <MenuItem x:Name="ContextPinItem"
+                      Header="Pin to Shelf"
+                      InputGestureText="P"
+                      Tag="{x:Static core:CardActionKind.Pin}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE718;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Open in Default App"
+                      InputGestureText="Space"
+                      Tag="{x:Static core:CardActionKind.OpenInPreview}"
+                      Click="OnContextActionClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE890;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Reveal in File Explorer"
+                      Tag="{x:Static local:CardCommand.RevealInExplorer}"
+                      Click="OnContextCommandClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8B7;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+
+            <Separator />
+
+            <MenuItem Header="Remove"
+                      InputGestureText="Del"
+                      Tag="{x:Static local:CardCommand.Remove}"
+                      Click="OnContextCommandClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE74D;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Clear Shelf"
+                      Tag="{x:Static local:CardCommand.ClearShelf}"
+                      Click="OnContextCommandClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE74D;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+
+            <Separator />
+
+            <MenuItem Header="Settings..."
+                      Tag="{x:Static local:CardCommand.OpenSettings}"
+                      Click="OnContextCommandClick">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE713;" Style="{StaticResource FluentMenuIconTextStyle}" />
+                </MenuItem.Icon>
+            </MenuItem>
+        </ContextMenu>
+    </UserControl.ContextMenu>
 
     <Grid>
         <Border x:Name="CardBorder"
@@ -43,7 +190,10 @@
                 </Grid.RowDefinitions>
 
                 <!-- Thumbnail -->
-                <Border Grid.Row="0" Background="{StaticResource PreviewSurfaceBrush}" ClipToBounds="True">
+                <Border x:Name="ThumbnailSurface"
+                        Grid.Row="0"
+                        Background="{StaticResource PreviewSurfaceBrush}"
+                        ClipToBounds="True">
                     <Grid>
                         <Image Source="{Binding Thumbnail}"
                                Stretch="Uniform"
@@ -58,33 +208,89 @@
                                    Foreground="{StaticResource TextTertiaryBrush}"
                                    Visibility="{Binding HasThumbnail, Converter={StaticResource InverseBoolToVisibility}}" />
 
-                        <!-- Dimensions chip -->
-                        <Border Style="{StaticResource BadgeBorderStyle}"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Bottom"
-                                Margin="9,0,0,9">
-                            <TextBlock Text="{Binding DimensionsLabel}"
-                                       FontFamily="{StaticResource UiFontFamily}"
-                                       FontSize="10"
-                                       Foreground="{StaticResource TextSecondaryBrush}" />
-                        </Border>
+                        <!-- QR / barcode pill + dimensions -->
+                        <StackPanel HorizontalAlignment="Left"
+                                    VerticalAlignment="Bottom"
+                                    Margin="9,0,0,9">
+                            <Button x:Name="QrPillButton"
+                                    Margin="0,0,0,6"
+                                    Style="{StaticResource QrPillButtonStyle}"
+                                    Click="OnQrPillClick"
+                                    Visibility="{Binding HasDetectedBarcode, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}"
+                                    ToolTipService.ShowDuration="12000">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE71B;"
+                                               FontFamily="{StaticResource GlyphFontFamily}"
+                                               FontSize="11"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource AccentStrongBrush}" />
+                                    <TextBlock Text="QR:"
+                                               Margin="5,0,0,0"
+                                               VerticalAlignment="Center"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextSecondaryBrush}" />
+                                    <TextBlock Text="{Binding DetectedBarcodeLabel}"
+                                               Margin="4,0,0,0"
+                                               MaxWidth="142"
+                                               VerticalAlignment="Center"
+                                               FontSize="10"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
 
-                        <!-- Pinned badge -->
-                        <Border HorizontalAlignment="Left"
-                                VerticalAlignment="Top"
-                                Margin="9"
-                                Width="22"
-                                Height="22"
-                                CornerRadius="7"
-                                Background="{StaticResource ChipSurfaceBrush}"
-                                Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="&#xE718;"
-                                       FontFamily="{StaticResource GlyphFontFamily}"
-                                       FontSize="10"
-                                       Foreground="{StaticResource AccentStrongBrush}"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center" />
-                        </Border>
+                            <Border Style="{StaticResource BadgeBorderStyle}" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding DimensionsLabel}"
+                                           FontFamily="{StaticResource UiFontFamily}"
+                                           FontSize="10"
+                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Top toolbar: close + configured slots -->
+                        <Grid x:Name="TopActionBar"
+                              VerticalAlignment="Top"
+                              Margin="7"
+                              Opacity="0"
+                              IsHitTestVisible="False">
+                            <Button x:Name="CloseButton"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource DangerCardActionButtonStyle}"
+                                    Content="&#xE8BB;"
+                                    ToolTip="Remove from shelf"
+                                    Click="OnCloseClick" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="TopSlot1Button"
+                                        Style="{StaticResource CardActionButtonStyle}"
+                                        Visibility="Collapsed"
+                                        Click="OnSlotClick" />
+                                <Button x:Name="TopSlot2Button"
+                                        Margin="1,0,0,0"
+                                        Style="{StaticResource CardActionButtonStyle}"
+                                        Visibility="Collapsed"
+                                        Click="OnSlotClick" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Bottom toolbar: configured slots -->
+                        <StackPanel x:Name="BottomSlotPanel"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,9,9"
+                                    Opacity="0"
+                                    IsHitTestVisible="False">
+                            <Button x:Name="BottomSlot1Button"
+                                    Style="{StaticResource CardActionButtonStyle}"
+                                    Visibility="Collapsed"
+                                    Click="OnSlotClick" />
+                            <Button x:Name="BottomSlot2Button"
+                                    Margin="1,0,0,0"
+                                    Style="{StaticResource CardActionButtonStyle}"
+                                    Visibility="Collapsed"
+                                    Click="OnSlotClick" />
+                        </StackPanel>
 
                         <!-- OCR busy overlay -->
                         <Border Background="#B3000000"
@@ -122,6 +328,13 @@
                         <TextBlock Text="{Binding SourceLabel}"
                                    FontSize="10.5"
                                    Foreground="{StaticResource TextTertiaryBrush}" />
+                        <TextBlock Text="&#xE718;"
+                                   Margin="7,0,0,0"
+                                   FontFamily="{StaticResource GlyphFontFamily}"
+                                   FontSize="9"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource AccentStrongBrush}"
+                                   Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
                     <TextBlock Text="{Binding AgeLabel}"
                                HorizontalAlignment="Right"
@@ -129,48 +342,6 @@
                                FontSize="10"
                                Foreground="{StaticResource TextTertiaryBrush}" />
                 </Grid>
-
-                <!-- Hover toolbar -->
-                <Border x:Name="ActionBar"
-                        Grid.RowSpan="2"
-                        Margin="8"
-                        Padding="2"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Top"
-                        CornerRadius="9"
-                        Background="{StaticResource ToolbarSurfaceBrush}"
-                        BorderBrush="{StaticResource HairlineBrush}"
-                        BorderThickness="1"
-                        Opacity="0"
-                        IsHitTestVisible="False">
-                    <StackPanel Orientation="Horizontal">
-                        <Button x:Name="CopyImageButton"
-                                Style="{StaticResource CardActionButtonStyle}"
-                                Content="&#xE8C8;"
-                                ToolTip="Copy image"
-                                Click="OnCopyImageClick" />
-                        <Button x:Name="CopyTextButton"
-                                Style="{StaticResource TextIconButtonStyle}"
-                                Content="T"
-                                ToolTip="Copy text (OCR)"
-                                Click="OnCopyTextClick" />
-                        <Button x:Name="PinButton"
-                                Style="{StaticResource CardActionButtonStyle}"
-                                Content="{Binding PinGlyph}"
-                                ToolTip="{Binding PinTooltip}"
-                                Click="OnPinClick" />
-                        <Button x:Name="SaveButton"
-                                Style="{StaticResource CardActionButtonStyle}"
-                                Content="&#xE74E;"
-                                ToolTip="Save image"
-                                Click="OnSaveClick" />
-                        <Button x:Name="RemoveButton"
-                                Style="{StaticResource DangerCardActionButtonStyle}"
-                                Content="&#xE74D;"
-                                ToolTip="Remove from shelf"
-                                Click="OnRemoveClick" />
-                    </StackPanel>
-                </Border>
             </Grid>
         </Border>
     </Grid>

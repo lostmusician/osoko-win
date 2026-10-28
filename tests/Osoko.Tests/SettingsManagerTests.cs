@@ -50,6 +50,13 @@ public sealed class SettingsManagerTests : IDisposable
         Assert.True(settings.CleanPicturesFolder);
         Assert.False(settings.CaptureClipboardFromAnyApp);
         Assert.False(settings.EnableGlobalHotkey);
+        Assert.Equal(CardActionKind.SaveToFolder, settings.TopActionSlot1);
+        Assert.Equal(CardActionKind.Pin, settings.TopActionSlot2);
+        Assert.Equal(CardActionKind.CopyDownscaled, settings.BottomActionSlot1);
+        Assert.Equal(CardActionKind.Share, settings.BottomActionSlot2);
+        Assert.Equal(CardActionKind.CopyOriginal, settings.PrimaryClickAction);
+        Assert.Equal(CardActionKind.OpenInPreview, settings.DoubleClickAction);
+        Assert.True(settings.EnableHoverShortcuts);
         Assert.False(string.IsNullOrWhiteSpace(settings.SaveLocationPath));
         Assert.False(File.Exists(manager.SettingsFilePath));
     }
@@ -75,6 +82,13 @@ public sealed class SettingsManagerTests : IDisposable
         settings.CleanPicturesFolder = false;
         settings.CaptureClipboardFromAnyApp = true;
         settings.EnableGlobalHotkey = true;
+        settings.TopActionSlot1 = CardActionKind.CopyOcr;
+        settings.TopActionSlot2 = CardActionKind.None;
+        settings.BottomActionSlot1 = CardActionKind.SaveAs;
+        settings.BottomActionSlot2 = CardActionKind.CopyOriginal;
+        settings.PrimaryClickAction = CardActionKind.CopyDownscaled;
+        settings.DoubleClickAction = CardActionKind.Share;
+        settings.EnableHoverShortcuts = false;
 
         manager.Save(settings);
 
@@ -97,6 +111,18 @@ public sealed class SettingsManagerTests : IDisposable
         Assert.False(reloaded.CleanPicturesFolder);
         Assert.True(reloaded.CaptureClipboardFromAnyApp);
         Assert.True(reloaded.EnableGlobalHotkey);
+        Assert.Equal(CardActionKind.CopyOcr, reloaded.TopActionSlot1);
+        Assert.Equal(CardActionKind.None, reloaded.TopActionSlot2);
+        Assert.Equal(CardActionKind.SaveAs, reloaded.BottomActionSlot1);
+        Assert.Equal(CardActionKind.CopyOriginal, reloaded.BottomActionSlot2);
+        Assert.Equal(CardActionKind.CopyDownscaled, reloaded.PrimaryClickAction);
+        Assert.Equal(CardActionKind.Share, reloaded.DoubleClickAction);
+        Assert.False(reloaded.EnableHoverShortcuts);
+
+        var json = File.ReadAllText(manager.SettingsFilePath);
+        Assert.Contains("\"topActionSlot1\": \"copy_ocr\"", json);
+        Assert.Contains("\"topActionSlot2\": \"none\"", json);
+        Assert.Contains("\"doubleClickAction\": \"share\"", json);
     }
 
     [Fact]
@@ -210,6 +236,13 @@ public sealed class SettingsManagerTests : IDisposable
         source.CleanPicturesFolder = false;
         source.CaptureClipboardFromAnyApp = true;
         source.EnableGlobalHotkey = true;
+        source.TopActionSlot1 = CardActionKind.CopyOcr;
+        source.TopActionSlot2 = CardActionKind.None;
+        source.BottomActionSlot1 = CardActionKind.SaveAs;
+        source.BottomActionSlot2 = CardActionKind.CopyOriginal;
+        source.PrimaryClickAction = CardActionKind.CopyDownscaled;
+        source.DoubleClickAction = CardActionKind.Share;
+        source.EnableHoverShortcuts = false;
 
         var target = OsokoSettings.CreateDefault();
         target.CopyFrom(source);
@@ -229,5 +262,12 @@ public sealed class SettingsManagerTests : IDisposable
         Assert.False(target.CleanPicturesFolder);
         Assert.True(target.CaptureClipboardFromAnyApp);
         Assert.True(target.EnableGlobalHotkey);
+        Assert.Equal(CardActionKind.CopyOcr, target.TopActionSlot1);
+        Assert.Equal(CardActionKind.None, target.TopActionSlot2);
+        Assert.Equal(CardActionKind.SaveAs, target.BottomActionSlot1);
+        Assert.Equal(CardActionKind.CopyOriginal, target.BottomActionSlot2);
+        Assert.Equal(CardActionKind.CopyDownscaled, target.PrimaryClickAction);
+        Assert.Equal(CardActionKind.Share, target.DoubleClickAction);
+        Assert.False(target.EnableHoverShortcuts);
     }
 }

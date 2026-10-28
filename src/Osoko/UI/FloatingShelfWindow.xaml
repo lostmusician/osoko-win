@@ -14,7 +14,7 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         ResizeMode="NoResize"
-        Focusable="False"
+        Focusable="True"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         FontFamily="{StaticResource UiFontFamily}"
@@ -23,6 +23,7 @@
         MouseLeave="OnWindowMouseLeave"
         MouseMove="OnWindowMouseMove"
         PreviewMouseDown="OnWindowPreviewMouseDown"
+        PreviewKeyDown="OnShelfPreviewKeyDown"
         Closing="OnWindowClosing">
 
     <Window.Resources>
@@ -31,7 +32,8 @@
         <conv:CountToVisibilityConverter x:Key="CountToVisibility" Threshold="0" />
 
         <DataTemplate DataType="{x:Type core:ScreenshotItem}">
-            <controls:ScreenshotCard Margin="0,0,0,10" />
+            <controls:ScreenshotCard Margin="0,0,0,10"
+                                     Settings="{Binding DataContext.Settings, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}" />
         </DataTemplate>
     </Window.Resources>
 

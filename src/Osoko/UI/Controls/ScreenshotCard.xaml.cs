@@ -7,37 +7,89 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Osoko.Core;
 using Drawing = System.Drawing;
 using DrawingImaging = System.Drawing.Imaging;
 
 namespace Osoko.UI.Controls;
 
-/// <summary>Actions a <see cref="ScreenshotCard"/> can request from its host.</summary>
-public enum CardAction
+/// <summary>UI-only commands a card can request in addition to manager actions.</summary>
+public enum CardCommand
 {
-    CopyImage,
-    CopyText,
-    TogglePin,
-    Save,
-    Delete,
+    /// <summary>Run <see cref="CardActionEventArgs.Kind"/> through the screenshot manager.</summary>
+    ExecuteAction,
 
     /// <summary>An OLE drag finished; <see cref="CardActionEventArgs.Effect"/> carries the result.</summary>
     DragCompleted,
+
+    /// <summary>Remove the card from the shelf.</summary>
+    Remove,
+
+    /// <summary>Clear every unpinned card from the shelf.</summary>
+    ClearShelf,
+
+    /// <summary>Open the settings window.</summary>
+    OpenSettings,
+
+    /// <summary>Reveal the capture in File Explorer.</summary>
+    RevealInExplorer,
 }
 
 /// <summary>Payload for <see cref="ScreenshotCard.ActionRequested"/>.</summary>
 public sealed class CardActionEventArgs : RoutedEventArgs
 {
-    public CardActionEventArgs(RoutedEvent routedEvent, CardAction action, ScreenshotItem item, DragDropEffects effect)
+    public CardActionEventArgs(
+        RoutedEvent routedEvent,
+        CardCommand command,
+        CardActionKind kind,
+        ScreenshotItem item,
+        DragDropEffects effect = DragDropEffects.None)
         : base(routedEvent)
     {
-        Action = action;
+        Command = command;
+        Kind = kind;
         Item = item;
         Effect = effect;
     }
 
-    public CardAction Action { get; }
+    public CardActionEventArgs(RoutedEvent routedEvent, CardActionKind kind, ScreenshotItem item)
+        : this(routedEvent, CardCommand.ExecuteAction, kind, item)
+    {
+    }
+
+    public CardActionEventArgs(
+        RoutedEvent routedEvent,
+        CardActionKind kind,
+        ScreenshotItem item,
+        DragDropEffects effect)
+        : this(routedEvent, CardCommand.ExecuteAction, kind, item, effect)
+    {
+    }
+
+    public CardActionEventArgs(
+        RoutedEvent routedEvent,
+        CardCommand command,
+        ScreenshotItem item,
+        DragDropEffects effect = DragDropEffects.None)
+        : this(routedEvent, command, CardActionKind.None, item, effect)
+    {
+    }
+
+    /// <summary>What the host should do.</summary>
+    public CardCommand Command { get; }
+
+    /// <summary>Manager action to execute when <see cref="Command"/> is <see cref="CardCommand.ExecuteAction"/>.</summary>
+    public CardActionKind Kind { get; }
+
+    /// <summary>Alias for <see cref="Kind"/>.</summary>
+    public CardActionKind ActionKind => Kind;
+
+    /// <summary>Alias for <see cref="Kind"/>.</summary>
+    public CardActionKind Action => Kind;
+
+    /// <summary>True when this payload reports the result of an OLE drag.</summary>
+    public bool IsDragCompleted => Command == CardCommand.DragCompleted;
 
     public ScreenshotItem Item { get; }
 
@@ -57,13 +109,14 @@ public sealed class CardDragStateEventArgs : RoutedEventArgs
 }
 
 /// <summary>
-/// One capture on the shelf: Fluent card with a high-DPI preview, a metadata strip and a
-/// hover toolbar (copy image, copy OCR text, pin, save, remove). Dragging the card starts
-/// a multi-format OLE drag so the screenshot can be pasted into any application.
+/// One capture on the shelf: a Fluent card with a high-DPI preview, QR indicator,
+/// metadata strip, modular action slots, click gestures and a comprehensive context
+/// menu. Dragging the card starts a multi-format OLE drag so it can be pasted into
+/// any application.
 /// </summary>
 public partial class ScreenshotCard : UserControl
 {
-    /// <summary>Bubbling event carrying every toolbar / drag request.</summary>
+    /// <summary>Bubbling event carrying every toolbar, gesture, menu and drag request.</summary>
     public static readonly RoutedEvent ActionRequestedEvent = EventManager.RegisterRoutedEvent(
         "ActionRequested",
         RoutingStrategy.Bubble,
@@ -77,15 +130,38 @@ public partial class ScreenshotCard : UserControl
         typeof(EventHandler<CardDragStateEventArgs>),
         typeof(ScreenshotCard));
 
+    /// <summary>Action settings used by the modular toolbar, gestures and shortcuts.</summary>
+    public static readonly DependencyProperty SettingsProperty = DependencyProperty.Register(
+        nameof(Settings),
+        typeof(OsokoSettings),
+        typeof(ScreenshotCard),
+        new PropertyMetadata(null, OnSettingsPropertyChanged));
+
+    private static readonly TimeSpan SingleClickDelay =
+        TimeSpan.FromMilliseconds(System.Windows.Forms.SystemInformation.DoubleClickTime);
+
+    private readonly DispatcherTimer _singleClickTimer;
     private Point _dragOrigin;
     private bool _dragArmed;
+    private bool _dragStarted;
+    private bool _clickCandidate;
+    private bool _doubleClickPending;
     private DoubleAnimation? _spinnerAnimation;
     private ScreenshotItem? _subscribedItem;
+    private OsokoSettings? _subscribedSettings;
 
     public ScreenshotCard()
     {
         InitializeComponent();
+
+        _singleClickTimer = new DispatcherTimer(DispatcherPriority.Input)
+        {
+            Interval = SingleClickDelay,
+        };
+        _singleClickTimer.Tick += OnSingleClickTimerTick;
+
         DataContextChanged += OnDataContextChanged;
+        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
 
@@ -101,41 +177,213 @@ public partial class ScreenshotCard : UserControl
         remove => RemoveHandler(DragStateChangedEvent, value);
     }
 
-    private ScreenshotItem? Item => DataContext as ScreenshotItem;
+    /// <summary>Action settings supplied by the shelf's data template.</summary>
+    public OsokoSettings? Settings
+    {
+        get => (OsokoSettings?)GetValue(SettingsProperty);
+        set => SetValue(SettingsProperty, value);
+    }
+
+    /// <summary>The item currently rendered by this card.</summary>
+    public ScreenshotItem? Item => DataContext as ScreenshotItem;
 
     // ---------------------------------------------------------------------
-    // Toolbar
+    // Modular slots
     // ---------------------------------------------------------------------
 
-    private void OnCopyImageClick(object sender, RoutedEventArgs e)
+    private void RefreshSlots()
     {
-        e.Handled = true;
-        Request(CardAction.CopyImage);
+        ConfigureSlot(TopSlot1Button, Settings?.TopActionSlot1 ?? CardActionKind.None);
+        ConfigureSlot(TopSlot2Button, Settings?.TopActionSlot2 ?? CardActionKind.None);
+        ConfigureSlot(BottomSlot1Button, Settings?.BottomActionSlot1 ?? CardActionKind.None);
+        ConfigureSlot(BottomSlot2Button, Settings?.BottomActionSlot2 ?? CardActionKind.None);
     }
 
-    private void OnCopyTextClick(object sender, RoutedEventArgs e)
+    private void ConfigureSlot(Button button, CardActionKind action)
     {
-        e.Handled = true;
-        Request(CardAction.CopyText);
+        if (action == CardActionKind.None)
+        {
+            button.Visibility = Visibility.Collapsed;
+            button.Tag = null;
+            button.Content = null;
+            button.ToolTip = null;
+            return;
+        }
+
+        button.Visibility = Visibility.Visible;
+        button.Tag = action;
+
+        var isPinned = action == CardActionKind.Pin && Item?.IsPinned == true;
+        button.Content = action.Glyph();
+        button.ToolTip = action.Tooltip();
+
+        var styleKey = isPinned ? "PinnedCardActionButtonStyle" : "CardActionButtonStyle";
+        if (TryFindResource(styleKey) is Style style)
+        {
+            button.Style = style;
+        }
     }
 
-    private void OnPinClick(object sender, RoutedEventArgs e)
+    private void OnSlotClick(object sender, RoutedEventArgs e)
     {
-        e.Handled = true;
-        Request(CardAction.TogglePin);
+        if (sender is Button { Tag: CardActionKind action } && action != CardActionKind.None)
+        {
+            e.Handled = true;
+            RequestAction(action);
+        }
     }
 
-    private void OnSaveClick(object sender, RoutedEventArgs e)
+    private void OnCloseClick(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        Request(CardAction.Save);
+        Request(CardCommand.Remove);
     }
 
-    private void OnRemoveClick(object sender, RoutedEventArgs e)
+    private void OnQrPillClick(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        Request(CardAction.Delete);
+
+        var item = Item;
+        if (item is null || !item.HasDetectedBarcode)
+        {
+            return;
+        }
+
+        RequestAction(IsWebLink(item.DetectedBarcode)
+            ? CardActionKind.OpenQrLink
+            : CardActionKind.CopyQrLink);
     }
+
+    private void UpdateQrPill()
+    {
+        var payload = Item?.DetectedBarcode;
+        QrPillButton.ToolTip = string.IsNullOrWhiteSpace(payload)
+            ? null
+            : $"{payload}\nClick to open or copy · Right-click for more options";
+    }
+
+    // ---------------------------------------------------------------------
+    // Context menu
+    // ---------------------------------------------------------------------
+
+    private void OnContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        var item = Item;
+        var hasBarcode = item?.HasDetectedBarcode == true;
+        var isLink = hasBarcode && IsWebLink(item!.DetectedBarcode);
+
+        ContextOpenQrItem.Visibility = isLink ? Visibility.Visible : Visibility.Collapsed;
+        ContextCopyQrItem.Visibility = hasBarcode ? Visibility.Visible : Visibility.Collapsed;
+        ContextQrSeparator.Visibility = hasBarcode ? Visibility.Visible : Visibility.Collapsed;
+        ContextPinItem.Header = item?.IsPinned == true ? "Unpin" : "Pin to Shelf";
+
+        if (ContextMenu is not null)
+        {
+            ContextMenu.DataContext = item;
+        }
+    }
+
+    private void OnContextActionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: CardActionKind action } && action != CardActionKind.None)
+        {
+            e.Handled = true;
+            RequestAction(action);
+        }
+    }
+
+    private void OnContextCommandClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: CardCommand command })
+        {
+            e.Handled = true;
+            Request(command);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Click gestures & hover shortcuts
+    // ---------------------------------------------------------------------
+
+    internal bool TryHandleHoverShortcut(KeyEventArgs e)
+    {
+        if (e.Handled || Settings?.EnableHoverShortcuts != true)
+        {
+            return false;
+        }
+
+        var request = ResolveShortcut(e.Key, Keyboard.Modifiers, Item);
+        if (request is null)
+        {
+            return false;
+        }
+
+        e.Handled = true;
+        Request(request.Value.Command, request.Value.Kind);
+        return true;
+    }
+
+    internal void FocusForHoverShortcuts()
+    {
+        if (Settings?.EnableHoverShortcuts == true && Focusable)
+        {
+            Focus();
+        }
+    }
+
+    private void OnCardPreviewKeyDown(object sender, KeyEventArgs e) => TryHandleHoverShortcut(e);
+
+    private void OnSingleClickTimerTick(object? sender, EventArgs e)
+    {
+        _singleClickTimer.Stop();
+        ExecuteGesture(doubleClick: false);
+    }
+
+    private void ExecuteGesture(bool doubleClick)
+    {
+        if (Item is null || Settings is null)
+        {
+            return;
+        }
+
+        var action = doubleClick ? Settings.DoubleClickAction : Settings.PrimaryClickAction;
+        if (action != CardActionKind.None)
+        {
+            RequestAction(action);
+        }
+    }
+
+    private static ShortcutRequest? ResolveShortcut(Key key, ModifierKeys modifiers, ScreenshotItem? item)
+    {
+        if ((modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) != 0)
+        {
+            return null;
+        }
+
+        return key switch
+        {
+            Key.D1 or Key.NumPad1 => Execute(CardActionKind.CopyDownscaled),
+            Key.D2 or Key.NumPad2 or Key.C => Execute(CardActionKind.CopyOriginal),
+            Key.T => Execute(CardActionKind.CopyOcr),
+            Key.R => Execute(CardActionKind.RedactSensitive),
+            Key.L => Execute(IsWebLink(item?.DetectedBarcode)
+                ? CardActionKind.OpenQrLink
+                : CardActionKind.CopyQrLink),
+            Key.P => Execute(CardActionKind.Pin),
+            Key.S when (modifiers & ModifierKeys.Shift) != 0 => Execute(CardActionKind.SaveAs),
+            Key.S => Execute(CardActionKind.SaveToFolder),
+            Key.Space => Execute(CardActionKind.OpenInPreview),
+            Key.Delete or Key.Back => new ShortcutRequest(CardCommand.Remove, CardActionKind.None),
+            _ => null,
+        };
+    }
+
+    private static ShortcutRequest Execute(CardActionKind kind) =>
+        new(CardCommand.ExecuteAction, kind);
+
+    private static bool IsWebLink(string? value) =>
+        Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     // ---------------------------------------------------------------------
     // Hover visuals
@@ -143,14 +391,25 @@ public partial class ScreenshotCard : UserControl
 
     private void OnCardMouseEnter(object sender, MouseEventArgs e)
     {
-        ActionBar.IsHitTestVisible = true;
-        Animate(ActionBar, OpacityProperty, 1d, 120);
+        TopActionBar.IsHitTestVisible = true;
+        BottomSlotPanel.IsHitTestVisible = true;
+        Animate(TopActionBar, OpacityProperty, 1d, 120);
+        Animate(BottomSlotPanel, OpacityProperty, 1d, 120);
+        FocusForHoverShortcuts();
     }
 
     private void OnCardMouseLeave(object sender, MouseEventArgs e)
     {
-        ActionBar.IsHitTestVisible = false;
-        Animate(ActionBar, OpacityProperty, 0d, 160);
+        TopActionBar.IsHitTestVisible = false;
+        BottomSlotPanel.IsHitTestVisible = false;
+        Animate(TopActionBar, OpacityProperty, 0d, 160);
+        Animate(BottomSlotPanel, OpacityProperty, 0d, 160);
+
+        // Drop the hover focus so shortcuts stop once the pointer leaves the card.
+        if (IsKeyboardFocusWithin)
+        {
+            Keyboard.ClearFocus();
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -159,10 +418,25 @@ public partial class ScreenshotCard : UserControl
 
     private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsWithinButton(e.OriginalSource as DependencyObject))
+        var source = e.OriginalSource as DependencyObject;
+
+        if (IsWithinButton(source))
         {
             _dragArmed = false;
+            _dragStarted = false;
+            _clickCandidate = false;
+            _doubleClickPending = false;
+            _singleClickTimer.Stop();
             return;
+        }
+
+        _clickCandidate = IsWithinThumbnail(source);
+        _doubleClickPending = e.ClickCount >= 2 && _clickCandidate;
+        _dragStarted = false;
+
+        if (_doubleClickPending || !_clickCandidate)
+        {
+            _singleClickTimer.Stop();
         }
 
         _dragOrigin = e.GetPosition(this);
@@ -184,10 +458,38 @@ public partial class ScreenshotCard : UserControl
         }
 
         _dragArmed = false;
+        _dragStarted = true;
+        _clickCandidate = false;
+        _doubleClickPending = false;
+        _singleClickTimer.Stop();
         BeginDrag();
     }
 
-    private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) => _dragArmed = false;
+    private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var clickCandidate = _clickCandidate;
+        _clickCandidate = false;
+        _dragArmed = false;
+
+        if (!clickCandidate || _dragStarted)
+        {
+            _dragStarted = false;
+            _doubleClickPending = false;
+            return;
+        }
+
+        if (_doubleClickPending || e.ClickCount >= 2)
+        {
+            _doubleClickPending = false;
+            _singleClickTimer.Stop();
+            ExecuteGesture(doubleClick: true);
+            return;
+        }
+
+        _doubleClickPending = false;
+        _singleClickTimer.Stop();
+        _singleClickTimer.Start();
+    }
 
     private void BeginDrag()
     {
@@ -213,7 +515,7 @@ public partial class ScreenshotCard : UserControl
             RaiseEvent(new CardDragStateEventArgs(DragStateChangedEvent, false));
         }
 
-        Request(CardAction.DragCompleted, effects);
+        Request(CardCommand.DragCompleted, CardActionKind.None, effects);
     }
 
     /// <summary>
@@ -312,11 +614,14 @@ public partial class ScreenshotCard : UserControl
     // Helpers
     // ---------------------------------------------------------------------
 
-    private void Request(CardAction action, DragDropEffects effect = DragDropEffects.None)
+    private void RequestAction(CardActionKind kind) =>
+        Request(CardCommand.ExecuteAction, kind);
+
+    private void Request(CardCommand command, CardActionKind kind = CardActionKind.None, DragDropEffects effect = DragDropEffects.None)
     {
         if (Item is { } item)
         {
-            RaiseEvent(new CardActionEventArgs(ActionRequestedEvent, action, item, effect));
+            RaiseEvent(new CardActionEventArgs(ActionRequestedEvent, command, kind, item, effect));
         }
     }
 
@@ -331,6 +636,13 @@ public partial class ScreenshotCard : UserControl
         element.BeginAnimation(property, animation);
     }
 
+    private static DependencyObject? GetParent(DependencyObject source) => source switch
+    {
+        Visual => VisualTreeHelper.GetParent(source),
+        FrameworkContentElement content => content.Parent,
+        _ => LogicalTreeHelper.GetParent(source),
+    };
+
     private static bool IsWithinButton(DependencyObject? source)
     {
         while (source is not null && source is not ScreenshotCard)
@@ -340,7 +652,22 @@ public partial class ScreenshotCard : UserControl
                 return true;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetParent(source);
+        }
+
+        return false;
+    }
+
+    private bool IsWithinThumbnail(DependencyObject? source)
+    {
+        while (source is not null && source != this)
+        {
+            if (ReferenceEquals(source, ThumbnailSurface))
+            {
+                return true;
+            }
+
+            source = GetParent(source);
         }
 
         return false;
@@ -348,6 +675,8 @@ public partial class ScreenshotCard : UserControl
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        _singleClickTimer.Stop();
+
         if (_subscribedItem is not null)
         {
             _subscribedItem.PropertyChanged -= OnItemPropertyChanged;
@@ -364,14 +693,80 @@ public partial class ScreenshotCard : UserControl
         {
             UpdateSpinner(false);
         }
+
+        RefreshSlots();
+        UpdateQrPill();
     }
 
     private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ScreenshotItem.IsRecognizing) && sender is ScreenshotItem item)
+        if (sender is not ScreenshotItem item)
         {
+            return;
+        }
+
+        switch (e.PropertyName)
+        {
+            case nameof(ScreenshotItem.IsRecognizing):
+                UpdateSpinner(item.IsRecognizing);
+                break;
+
+            case nameof(ScreenshotItem.IsPinned):
+                RefreshSlots();
+                break;
+
+            case nameof(ScreenshotItem.DetectedBarcode):
+            case nameof(ScreenshotItem.HasDetectedBarcode):
+            case nameof(ScreenshotItem.DetectedBarcodeLabel):
+                UpdateQrPill();
+                break;
+        }
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e) => RefreshSlots();
+
+    private static void OnSettingsPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ScreenshotCard card)
+        {
+            card.OnSettingsChanged(e.OldValue as OsokoSettings, e.NewValue as OsokoSettings);
+        }
+    }
+
+    private void OnSettingsChanged(OsokoSettings? oldSettings, OsokoSettings? newSettings)
+    {
+        if (_subscribedSettings is not null)
+        {
+            _subscribedSettings.PropertyChanged -= OnSettingsPropertyChanged;
+            _subscribedSettings = null;
+        }
+
+        if (newSettings is not null)
+        {
+            _subscribedSettings = newSettings;
+            newSettings.PropertyChanged += OnSettingsPropertyChanged;
+        }
+
+        RefreshSlots();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_subscribedItem is null && Item is { } item)
+        {
+            _subscribedItem = item;
+            item.PropertyChanged += OnItemPropertyChanged;
             UpdateSpinner(item.IsRecognizing);
         }
+
+        if (_subscribedSettings is null && Settings is { } settings)
+        {
+            _subscribedSettings = settings;
+            settings.PropertyChanged += OnSettingsPropertyChanged;
+        }
+
+        RefreshSlots();
+        UpdateQrPill();
     }
 
     private void UpdateSpinner(bool isRecognizing)
@@ -400,10 +795,20 @@ public partial class ScreenshotCard : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _singleClickTimer.Stop();
+
         if (_subscribedItem is not null)
         {
             _subscribedItem.PropertyChanged -= OnItemPropertyChanged;
             _subscribedItem = null;
         }
+
+        if (_subscribedSettings is not null)
+        {
+            _subscribedSettings.PropertyChanged -= OnSettingsPropertyChanged;
+            _subscribedSettings = null;
+        }
     }
+
+    private readonly record struct ShortcutRequest(CardCommand Command, CardActionKind Kind);
 }

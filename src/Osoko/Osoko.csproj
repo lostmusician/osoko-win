@@ -54,6 +54,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Pure managed barcode / QR decoding used by the card's link actions. -->
+    <PackageReference Include="ZXing.Net" Version="0.16.10" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Osoko.Tests" />
   </ItemGroup>
 
