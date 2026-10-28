@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -44,6 +45,7 @@ public partial class FloatingShelfWindow : Window
     private bool _suspended;
     private uint _displayAffinity;
     private bool _displayEventsHooked;
+    private ScreenshotCard? _hoveredCard;
 
     public FloatingShelfWindow(ScreenshotManager manager, OsokoSettings settings, AudioService audio)
     {
@@ -433,6 +435,8 @@ public partial class FloatingShelfWindow : Window
 
     private void OnWindowMouseEnter(object sender, MouseEventArgs e)
     {
+        UpdateHoveredCard(e.OriginalSource as DependencyObject);
+
         if (_manager.HasItems)
         {
             _collapseState.Expand();
@@ -442,6 +446,7 @@ public partial class FloatingShelfWindow : Window
 
     private void OnWindowMouseLeave(object sender, MouseEventArgs e)
     {
+        _hoveredCard = null;
         if (_isDragging)
         {
             return;
@@ -450,9 +455,59 @@ public partial class FloatingShelfWindow : Window
         _collapseState.NotifyPointerLeftShelf();
     }
 
-    private void OnWindowPreviewMouseDown(object sender, MouseButtonEventArgs e) => _collapseState.NotifyPointerActivity();
+    private void OnWindowPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        UpdateHoveredCard(e.OriginalSource as DependencyObject);
+        _collapseState.NotifyPointerActivity();
+    }
 
-    private void OnWindowMouseMove(object sender, MouseEventArgs e) => _collapseState.NotifyPointerActivity();
+    private void OnWindowMouseMove(object sender, MouseEventArgs e)
+    {
+        UpdateHoveredCard(e.OriginalSource as DependencyObject);
+        _collapseState.NotifyPointerActivity();
+    }
+
+    private void OnShelfPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Handled)
+        {
+            return;
+        }
+
+        var card = _hoveredCard ??
+                   FindAncestor<ScreenshotCard>(Keyboard.FocusedElement as DependencyObject);
+        if (card is not null && card.TryHandleHoverShortcut(e))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void UpdateHoveredCard(DependencyObject? source)
+    {
+        var card = FindAncestor<ScreenshotCard>(source);
+        if (ReferenceEquals(card, _hoveredCard))
+        {
+            return;
+        }
+
+        _hoveredCard = card;
+        card?.FocusForHoverShortcuts();
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? source) where T : DependencyObject
+    {
+        while (source is not null && source is not T)
+        {
+            source = source switch
+            {
+                Visual => VisualTreeHelper.GetParent(source),
+                FrameworkContentElement content => content.Parent,
+                _ => LogicalTreeHelper.GetParent(source),
+            };
+        }
+
+        return source as T;
+    }
 
     // ---------------------------------------------------------------------
     // Cards
@@ -462,81 +517,128 @@ public partial class FloatingShelfWindow : Window
     {
         try
         {
-            switch (e.Action)
+            switch (e.Command)
             {
-                case CardAction.CopyImage:
-                    if (_manager.CopyImage(e.Item.Id))
-                    {
-                        _audio.Play(AudioCue.Copy);
-                        ToastService.Show("Image Copied ✓");
-                    }
-                    else
-                    {
-                        ToastService.Show("Could not copy image");
-                    }
-
-                    break;
-
-                case CardAction.CopyText:
-                {
-                    if (e.Item.IsRecognizing)
-                    {
-                        break;
-                    }
-
-                    _collapseState.NotifyPointerActivity();
-                    var text = await _manager.CopyOcrTextAsync(e.Item.Id);
-                    if (string.IsNullOrEmpty(text))
-                    {
-                        ToastService.Show("No text found");
-                    }
-                    else
-                    {
-                        _audio.Play(AudioCue.Copy);
-                        ToastService.Show("Text Copied ✓");
-                    }
-
-                    break;
-                }
-
-                case CardAction.TogglePin:
-                    _manager.PinScreenshot(e.Item.Id);
-                    ToastService.Show(e.Item.IsPinned ? "Pinned ✓" : "Unpinned");
-                    break;
-
-                case CardAction.Save:
-                {
-                    _collapseState.NotifyPointerActivity();
-                    var savedPath = _manager.Save(e.Item.Id);
-                    ToastService.Show(savedPath is null ? "Save cancelled" : "Saved ✓");
-                    break;
-                }
-
-                case CardAction.Delete:
-                    if (_manager.RemoveScreenshot(e.Item.Id))
-                    {
-                        _audio.Play(AudioCue.Delete);
-                    }
-
-                    break;
-
-                case CardAction.DragCompleted:
+                case CardCommand.DragCompleted:
                     if (_settings.ConsumeOnDrop && e.Effect != DragDropEffects.None)
                     {
                         _manager.ConsumeDrop(e.Item.Id);
                     }
 
-                    break;
+                    return;
+
+                case CardCommand.Remove:
+                    _hoveredCard = null;
+                    if (_manager.RemoveScreenshot(e.Item.Id))
+                    {
+                        _audio.Play(AudioCue.Delete);
+                        ToastService.Show("Removed ✓");
+                    }
+                    else
+                    {
+                        ToastService.Show("Could not remove capture");
+                    }
+
+                    return;
+
+                case CardCommand.ClearShelf:
+                    {
+                        _hoveredCard = null;
+                        var removed = _manager.ClearAll();
+                        if (removed > 0)
+                        {
+                            _audio.Play(AudioCue.Delete);
+                            ToastService.Show(removed == 1 ? "Shelf cleared" : $"{removed} captures cleared");
+                        }
+
+                        return;
+                    }
+
+                case CardCommand.OpenSettings:
+                    SettingsRequested?.Invoke(this, EventArgs.Empty);
+                    return;
+
+                case CardCommand.RevealInExplorer:
+                    RevealInExplorer(e.Item.FilePath);
+                    return;
+
+                case CardCommand.ExecuteAction:
+                    {
+                        if (e.Kind == CardActionKind.None)
+                        {
+                            return;
+                        }
+
+                        var result = await _manager.ExecuteActionAsync(e.Kind, e.Item.Id);
+                        PresentActionResult(e.Kind, e.Item, result);
+                        return;
+                    }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancelled action leaves the shelf untouched.
         }
         catch (Exception ex)
         {
-            Log.Error($"Card action '{e.Action}' failed", ex);
+            Log.Error($"Card action '{e.Command}/{e.Kind}' failed", ex);
             ToastService.Show("Something went wrong");
         }
         finally
         {
             _collapseState.NotifyPointerActivity();
+        }
+    }
+
+    private void PresentActionResult(CardActionKind action, ScreenshotItem item, CardActionResult result)
+    {
+        if (!result.Success)
+        {
+            ToastService.Show(result.Message);
+            return;
+        }
+
+        if (action is CardActionKind.CopyDownscaled or CardActionKind.CopyOriginal or
+            CardActionKind.CopyOcr or CardActionKind.RedactSensitive or CardActionKind.CopyQrLink or
+            CardActionKind.SaveToFolder or CardActionKind.SaveAs)
+        {
+            _audio.Play(AudioCue.Copy);
+        }
+
+        var message = action switch
+        {
+            CardActionKind.CopyDownscaled => "Copied 1x Image ✓",
+            CardActionKind.CopyOriginal => "Image Copied ✓",
+            CardActionKind.CopyOcr => "Text Copied ✓",
+            CardActionKind.RedactSensitive => $"Redacted ({result.MatchCount} {(result.MatchCount == 1 ? "item" : "items")}) ✓",
+            CardActionKind.CopyQrLink => "Link Copied ✓",
+            CardActionKind.SaveToFolder or CardActionKind.SaveAs => "Saved ✓",
+            CardActionKind.Pin => item.IsPinned ? "Pinned ✓" : "Unpinned",
+            _ => result.Message,
+        };
+
+        if (!string.IsNullOrEmpty(message))
+        {
+            ToastService.Show(message);
+        }
+    }
+
+    private static void RevealInExplorer(string filePath)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{filePath}\"",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or
+            ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            Log.Warn($"Could not reveal '{filePath}': {ex.Message}");
+            ToastService.Show("Could not reveal file");
         }
     }
 

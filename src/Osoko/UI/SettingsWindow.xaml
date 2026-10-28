@@ -14,6 +14,23 @@
         FontFamily="{StaticResource UiFontFamily}"
         Icon="pack://application:,,,/Osoko;component/Assets/osoko-256.png">
 
+    <Window.Resources>
+        <DataTemplate x:Key="CardActionOptionTemplate">
+            <StackPanel Orientation="Horizontal" ToolTip="{Binding Tooltip}">
+                <TextBlock Text="{Binding Glyph}"
+                           Width="20"
+                           FontFamily="{StaticResource GlyphFontFamily}"
+                           FontSize="13"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource AccentStrongBrush}" />
+                <TextBlock Text="{Binding DisplayName}"
+                           Margin="6,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextPrimaryBrush}" />
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
     <Border CornerRadius="8"
             Background="{StaticResource WindowSurfaceBrush}"
             BorderBrush="{StaticResource HairlineStrongBrush}"
@@ -251,6 +268,173 @@
                                                   VerticalAlignment="Center"
                                                   IsChecked="{Binding ConsumeOnDrop, Mode=TwoWay}" />
                                 </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ===================== Actions & Toolbar ===================== -->
+                <TabItem Header="Actions &amp; Toolbar">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                        <StackPanel Margin="0,0,8,0">
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="Card Toolbar — Top Row" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBlock Text="The top-left close button is always available. Set a slot to “None (Hidden)” to hide it."
+                                               Style="{StaticResource FieldHintStyle}" />
+                                    <Border Style="{StaticResource DividerStyle}" />
+
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="250" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Top-Right Slot 1"
+                                                   Style="{StaticResource FieldLabelStyle}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="TopSlot1Combo"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource FluentComboBoxStyle}"
+                                                  ItemTemplate="{StaticResource CardActionOptionTemplate}"
+                                                  ItemsSource="{Binding ActionOptions, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                  SelectedValuePath="Action"
+                                                  SelectedValue="{Binding TopActionSlot1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsTextSearchEnabled="False" />
+                                    </Grid>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="250" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Top-Right Slot 2"
+                                                   Style="{StaticResource FieldLabelStyle}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="TopSlot2Combo"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource FluentComboBoxStyle}"
+                                                  ItemTemplate="{StaticResource CardActionOptionTemplate}"
+                                                  ItemsSource="{Binding ActionOptions, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                  SelectedValuePath="Action"
+                                                  SelectedValue="{Binding TopActionSlot2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsTextSearchEnabled="False" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="Card Toolbar — Bottom Row" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBlock Text="The dimensions badge is always shown on the bottom-left."
+                                               Style="{StaticResource FieldHintStyle}" />
+                                    <Border Style="{StaticResource DividerStyle}" />
+
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="250" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Bottom-Right Slot 1"
+                                                   Style="{StaticResource FieldLabelStyle}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="BottomSlot1Combo"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource FluentComboBoxStyle}"
+                                                  ItemTemplate="{StaticResource CardActionOptionTemplate}"
+                                                  ItemsSource="{Binding ActionOptions, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                  SelectedValuePath="Action"
+                                                  SelectedValue="{Binding BottomActionSlot1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsTextSearchEnabled="False" />
+                                    </Grid>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="250" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Bottom-Right Slot 2"
+                                                   Style="{StaticResource FieldLabelStyle}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="BottomSlot2Combo"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource FluentComboBoxStyle}"
+                                                  ItemTemplate="{StaticResource CardActionOptionTemplate}"
+                                                  ItemsSource="{Binding ActionOptions, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                  SelectedValuePath="Action"
+                                                  SelectedValue="{Binding BottomActionSlot2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsTextSearchEnabled="False" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="Click Gestures" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBlock Text="These actions run when you click or double-click the body of a screenshot card."
+                                               Style="{StaticResource FieldHintStyle}" />
+                                    <Border Style="{StaticResource DividerStyle}" />
+
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="250" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Single Click"
+                                                   Style="{StaticResource FieldLabelStyle}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="PrimaryClickCombo"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource FluentComboBoxStyle}"
+                                                  ItemTemplate="{StaticResource CardActionOptionTemplate}"
+                                                  ItemsSource="{Binding ActionOptions, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                  SelectedValuePath="Action"
+                                                  SelectedValue="{Binding PrimaryClickAction, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsTextSearchEnabled="False" />
+                                    </Grid>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="250" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Double Click"
+                                                   Style="{StaticResource FieldLabelStyle}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="DoubleClickCombo"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource FluentComboBoxStyle}"
+                                                  ItemTemplate="{StaticResource CardActionOptionTemplate}"
+                                                  ItemsSource="{Binding ActionOptions, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                  SelectedValuePath="Action"
+                                                  SelectedValue="{Binding DoubleClickAction, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsTextSearchEnabled="False" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="Hover Shortcuts" Style="{StaticResource SectionTitleStyle}" />
+                                    <Border Style="{StaticResource DividerStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Enable single-key shortcuts while hovering a card"
+                                                       Style="{StaticResource FieldLabelStyle}" />
+                                            <TextBlock Text="1 copies 1x, 2/C copies the original, T extracts text, S saves (Shift+S for Save As), P pins, L opens a detected QR link, R redacts sensitive data, Space opens, and Delete removes."
+                                                       Style="{StaticResource FieldHintStyle}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="HoverShortcutsToggle"
+                                                      Grid.Column="1"
+                                                      Margin="16,0,0,0"
+                                                      Style="{StaticResource ToggleSwitchStyle}"
+                                                      VerticalAlignment="Center"
+                                                      IsChecked="{Binding EnableHoverShortcuts, Mode=TwoWay}" />
+                                    </Grid>
+                                </StackPanel>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
