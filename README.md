@@ -34,6 +34,11 @@ rebuilt in **C# 13 / .NET 9 / WPF** with Win32 interop instead of AppKit.
 | **Zero-friction capture** | Intercepts `Win+Shift+S` / Print Screen output through the clipboard (`WM_CLIPBOARDUPDATE`) and watches `Pictures\Screenshots` — no need to change how you screenshot. |
 | **Ghost shelf** | Borderless, always-on-top, `WS_EX_NOACTIVATE` + `WS_EX_TOOLWINDOW`: never steals focus, never appears in Alt+Tab or on the taskbar, and `WDA_EXCLUDEFROMCAPTURE` keeps it out of screenshots and screen recordings. |
 | **Auto-collapse** | Slides off the right edge after 10 s of inactivity (3–60 s, configurable) leaving a slim grab handle that shows the number of parked captures. Hover the handle or touch the screen edge to peek it back in. |
+| **Modular action slots** | Customize four icon slots per card (two top-right, two bottom-right) and configure single-click and double-click card gestures. |
+| **1x downscaled copy** | Halves capture dimensions with high-quality WIC filtering so HiDPI screenshots don't blow out chat widths in Slack, Teams, or GitHub. |
+| **Smart QR & barcode detection** | Background detection using `ZXing.Net`. Detected codes display an interactive pill badge (`QR: domain.com`) with one-click URL launch or clipboard copy. |
+| **Privacy Shield** | Local on-device auto-redaction. Uses native Windows OCR word bounding boxes and regex to detect and black out API keys, tokens, emails, and credentials with solid rounded bars. |
+| **Hover shortcuts** | Instant single-key actions (`1`, `2`/`C`, `T`, `R`, `L`, `P`, `S`, `Space`, `Delete`) when hovering any card without needing to click first. |
 | **Offline OCR** | Windows' built-in `Windows.Media.Ocr` engine — ~100 ms, no cloud, no extra download. One click copies the recognised text; the result is cached per capture. |
 | **Drag anywhere** | Native OLE drag & drop with four formats at once: `CF_HDROP` (Explorer, Slack/Figma desktop), `CF_DIB` + `CF_BITMAP` (legacy Win32 apps) and PNG (web Slack, Discord, browser uploaders). |
 | **Smart stack** | Newest first, capped at 5 by default (1–15). Older captures are pruned automatically; pinned captures are never pruned. |
@@ -79,19 +84,34 @@ change that later in **Settings → General → Launch at Windows startup**.
 
 ### Card actions
 
-Hover a card to reveal its toolbar:
+Hover a card to reveal its toolbar and badges:
 
-| Button | Result |
+| Control | Result |
 | :--- | :--- |
-| 📋 **Copy image** | Puts the full-resolution bitmap on the clipboard. |
-| **T** **Copy text** | Runs Windows OCR, copies the text and shows “Text Copied ✓”. |
-| 📌 **Pin** | Keeps the capture on the shelf regardless of the stack limit or “Clear shelf”. |
-| 💾 **Save** | Saves to your default folder, or opens the Windows Save dialog when “Ask for a file name” is on. |
-| ✕ **Remove** | Deletes the capture from the shelf and the scratch cache. |
+| **Top-Right Slots** | Configurable quick actions (default: **Save to Location** and **Pin**). |
+| **Bottom-Right Slots** | Configurable quick actions (default: **Copy 1x Downscaled** and **Share**). |
+| **QR Badge** | Pill badge showing detected barcode / domain; click to open or copy URL. |
+| ✕ **Close** | Dismisses and deletes the capture from the shelf and the scratch cache. |
+| **Left Click** | Triggers configured primary action (default: **Copy 2x Original**). |
+| **Double Click** | Triggers configured double click action (default: **Open in Preview**). |
+| **Right Click** | Full context menu with 1x/2x copy, OCR, redaction, QR link, save as, share, pin, open, and settings. |
 | **Drag the card** | Drops a file + bitmap + PNG into any application. With “Consume after drag & drop” enabled the card leaves the shelf and its file is cleaned up 15 minutes later. |
 
-The shelf header has **Clear shelf** and **Settings**; the tray menu adds **Open shelf**,
-**Clear shelf**, **Open scratch folder** and **Exit Osoko**.
+### Hover shortcuts
+
+Hover your cursor over any card in the shelf to trigger instant single-key actions:
+
+| Key | Action |
+| :---: | :--- |
+| **`1`** | Copy 1x downscaled (halves HiDPI dimensions for Slack and GitHub) |
+| **`2`** or **`C`** | Copy original resolution (full bitmap) |
+| **`T`** | Copy recognized text (OCR) |
+| **`R`** | Redact sensitive data (API keys, tokens, emails, cards) |
+| **`L`** | Open or copy detected QR code link |
+| **`P`** | Toggle pin (keeps the card on shelf) |
+| **`S`** | Save to default location (`Shift+S` for Save As) |
+| **`Space`** | Open in default image viewer |
+| **`Delete`** or **`Backspace`** | Remove card from shelf |
 
 ### Settings
 
@@ -99,6 +119,7 @@ The shelf header has **Clear shelf** and **Settings**; the tray menu adds **Open
 | :--- | :--- |
 | **General** | Launch at Windows startup · show tray icon · play sound effects · copy new captures to the clipboard |
 | **Shelf & Stack** | Max captures on the shelf (1–15) · auto-collapse toggle · idle delay (3–60 s) · consume after drag & drop |
+| **Actions & Toolbar** | Configure Top-Right Slots 1 & 2 · Bottom-Right Slots 1 & 2 · Single-click gesture · Double-click gesture · Hover shortcuts toggle |
 | **Interception & Storage** | Watch clipboard · capture from any app · watch `Pictures\Screenshots` · keep Pictures clean · default save folder · ask for a file name · `Alt+Shift+S` hotkey |
 
 Settings are saved to `%LOCALAPPDATA%\Osoko\settings.json` on **Save**. Cancel discards every
