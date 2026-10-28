@@ -1,3 +1,4 @@
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Osoko.Core;
 using Osoko.Core.Services;
@@ -347,6 +348,119 @@ public sealed class ScreenshotManagerTests : IDisposable
     }
 
     [Fact]
+    public void DetectedBarcodeLabel_Uses_Host_For_Urls_And_Notifies()
+    {
+        var item = new ScreenshotItem(Path.Combine(_directory, "barcode.png"));
+        var changed = new List<string?>();
+        item.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        item.DetectedBarcode = " https://osoko.app/test ";
+
+        Assert.True(item.HasDetectedBarcode);
+        Assert.Equal("https://osoko.app/test", item.DetectedBarcode);
+        Assert.Equal("osoko.app", item.DetectedBarcodeLabel);
+        Assert.Contains(nameof(ScreenshotItem.DetectedBarcode), changed);
+        Assert.Contains(nameof(ScreenshotItem.HasDetectedBarcode), changed);
+        Assert.Contains(nameof(ScreenshotItem.DetectedBarcodeLabel), changed);
+    }
+
+    [Fact]
+    public void DetectedBarcodeLabel_Truncates_Long_NonUrl_Payloads()
+    {
+        var payload = new string('x', 80);
+        var item = new ScreenshotItem(Path.Combine(_directory, "barcode.png"))
+        {
+            DetectedBarcode = payload,
+        };
+
+        Assert.True(item.HasDetectedBarcode);
+        Assert.Equal(48, item.DetectedBarcodeLabel.Length);
+        Assert.EndsWith("…", item.DetectedBarcodeLabel);
+        Assert.Equal(new string('x', 47) + "…", item.DetectedBarcodeLabel);
+    }
+
+    [Fact]
+    public void DetectedBarcodeLabel_Is_Empty_When_No_Barcode_Exists()
+    {
+        var item = new ScreenshotItem(Path.Combine(_directory, "barcode.png"));
+
+        Assert.False(item.HasDetectedBarcode);
+        Assert.Null(item.DetectedBarcode);
+        Assert.Equal(string.Empty, item.DetectedBarcodeLabel);
+    }
+
+    [Fact]
+    public void CopyDownscaled_Uses_The_Clipboard_With_Half_Size_Image()
+    {
+        var path = CreatePngFile(100, 100);
+        var clipboard = new FakeClipboardService();
+        using var manager = CreateManager(clipboard);
+        var item = manager.AddScreenshot(path);
+
+        Assert.NotNull(item);
+        Assert.True(manager.CopyDownscaled(item!.Id));
+        Assert.NotNull(clipboard.LastImage);
+        Assert.Equal(50, clipboard.LastImage!.PixelWidth);
+        Assert.Equal(50, clipboard.LastImage.PixelHeight);
+        Assert.True(clipboard.LastImage.IsFrozen);
+    }
+
+    [Fact]
+    public void CopyDownscaled_Returns_False_Without_A_Clipboard_Service()
+    {
+        var item = _manager.AddScreenshot(CreateFile())!;
+
+        Assert.False(_manager.CopyDownscaled(item.Id));
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_Pin_Toggles_And_Reports_Status()
+    {
+        var item = _manager.AddScreenshot(CreateFile())!;
+
+        var pinned = await _manager.ExecuteActionAsync(CardActionKind.Pin, item.Id);
+        Assert.True(pinned.Success);
+        Assert.Equal(CardActionKind.Pin, pinned.Action);
+        Assert.True(item.IsPinned);
+        Assert.Equal("Pinned ✓", pinned.Message);
+
+        var unpinned = await _manager.ExecuteActionAsync(CardActionKind.Pin, item.Id);
+        Assert.True(unpinned.Success);
+        Assert.False(item.IsPinned);
+        Assert.Equal("Unpinned", unpinned.Message);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_None_Is_A_NoOp()
+    {
+        var item = _manager.AddScreenshot(CreateFile())!;
+
+        var result = await _manager.ExecuteActionAsync(CardActionKind.None, item.Id);
+
+        Assert.True(result.Success);
+        Assert.Equal(CardActionKind.None, result.Action);
+        Assert.Equal("No action", result.Message);
+        Assert.Equal(1, _manager.Count);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_CopyOriginal_Uses_Clipboard_Service()
+    {
+        var clipboard = new FakeClipboardService();
+        using var manager = CreateManager(clipboard);
+        var path = CreateFile();
+        var item = manager.AddScreenshot(path);
+
+        Assert.NotNull(item);
+        var result = await manager.ExecuteActionAsync(CardActionKind.CopyOriginal, item!.Id);
+
+        Assert.True(result.Success);
+        Assert.Equal(CardActionKind.CopyOriginal, result.Action);
+        Assert.Equal(path, clipboard.LastImagePath);
+        Assert.Contains("Copied", result.Message);
+    }
+
+    [Fact]
     public void GetByPath_Is_Case_Insensitive()
     {
         var path = CreateFile();
@@ -357,11 +471,65 @@ public sealed class ScreenshotManagerTests : IDisposable
         Assert.Null(_manager.GetByPath(null));
     }
 
+    private ScreenshotManager CreateManager(IClipboardService clipboard) =>
+        new(
+            _settings,
+            _tracker,
+            new FakeImageLoader(),
+            clipboard: clipboard,
+            deleteScratchFile: path =>
+            {
+                _deleted.Add(path);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            });
+
+    private string CreatePngFile(int width, int height)
+    {
+        var path = Path.Combine(_directory, $"image-{++_counter:D3}.png");
+        var stride = width * 4;
+        var pixels = new byte[stride * height];
+
+        for (var index = 0; index < pixels.Length; index += 4)
+        {
+            pixels[index] = 0x30;
+            pixels[index + 1] = 0x80;
+            pixels[index + 2] = 0xC0;
+            pixels[index + 3] = 0xFF;
+        }
+
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+        bitmap.Freeze();
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(path);
+        encoder.Save(stream);
+        return path;
+    }
+
     private string CreateFile()
     {
         var path = Path.Combine(_directory, $"capture-{++_counter:D3}.png");
         File.WriteAllText(path, $"fake image content {_counter}");
         return path;
+    }
+
+    private sealed class FakeClipboardService : IClipboardService
+    {
+        public string? LastImagePath { get; private set; }
+
+        public BitmapSource? LastImage { get; private set; }
+
+        public string? LastText { get; private set; }
+
+        public void SetImage(string filePath) => LastImagePath = filePath;
+
+        public void SetImage(BitmapSource image) => LastImage = image;
+
+        public void SetText(string text) => LastText = text;
     }
 
     private sealed class FakeImageLoader : IImageLoader
