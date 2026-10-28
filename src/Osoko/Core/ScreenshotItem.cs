@@ -28,17 +28,21 @@ public enum ScreenshotSource
 /// </summary>
 public sealed class ScreenshotItem : INotifyPropertyChanged
 {
+    private const int MaxBarcodeLabelLength = 48;
+
     private BitmapSource? _thumbnail;
     private bool _isPinned;
     private string? _ocrText;
     private bool _isRecognizing;
+    private string? _detectedBarcode;
     private int _pixelWidth;
     private int _pixelHeight;
 
     public ScreenshotItem(
         string filePath,
         ScreenshotSource source = ScreenshotSource.Imported,
-        DateTimeOffset? createdAt = null)
+        DateTimeOffset? createdAt = null,
+        string? detectedBarcode = null)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -48,6 +52,7 @@ public sealed class ScreenshotItem : INotifyPropertyChanged
         FilePath = Path.GetFullPath(filePath);
         Source = source;
         CreatedAt = createdAt ?? DateTimeOffset.Now;
+        DetectedBarcode = detectedBarcode;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -182,6 +187,52 @@ public sealed class ScreenshotItem : INotifyPropertyChanged
     }
 
     public bool HasOcrText => !string.IsNullOrEmpty(_ocrText);
+
+    /// <summary>
+    /// Payload of the first QR code or barcode detected in the capture. Null until the
+    /// background scan completes (or when the image contains no supported code).
+    /// </summary>
+    public string? DetectedBarcode
+    {
+        get => _detectedBarcode;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (Set(ref _detectedBarcode, normalized))
+            {
+                OnPropertyChanged(nameof(HasDetectedBarcode));
+                OnPropertyChanged(nameof(DetectedBarcodeLabel));
+            }
+        }
+    }
+
+    public bool HasDetectedBarcode => !string.IsNullOrWhiteSpace(_detectedBarcode);
+
+    /// <summary>
+    /// Short, bindable description of the barcode: the host name for web links,
+    /// otherwise the payload (truncated when it is long).
+    /// </summary>
+    public string DetectedBarcodeLabel
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_detectedBarcode))
+            {
+                return string.Empty;
+            }
+
+            var payload = _detectedBarcode.Trim();
+            if (Uri.TryCreate(payload, UriKind.Absolute, out var uri) &&
+                !string.IsNullOrWhiteSpace(uri.Host))
+            {
+                return uri.Host;
+            }
+
+            return payload.Length <= MaxBarcodeLabelLength
+                ? payload
+                : payload[..(MaxBarcodeLabelLength - 1)] + "…";
+        }
+    }
 
     /// <summary>True while the OCR engine is working on this item (drives the spinner).</summary>
     public bool IsRecognizing

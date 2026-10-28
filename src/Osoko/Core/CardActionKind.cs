@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Osoko.Core;
 
 /// <summary>
@@ -5,6 +8,7 @@ namespace Osoko.Core;
 /// gestures. Wire values match the macOS upstream (<c>copy_downscaled</c>,
 /// <c>open_qr_link</c>, …) so settings imported from Osoko for macOS keep working.
 /// </summary>
+[JsonConverter(typeof(CardActionKindJsonConverter))]
 public enum CardActionKind
 {
     /// <summary>No action is bound; the slot is hidden.</summary>
@@ -189,5 +193,58 @@ public static class CardActionKindExtensions
         }
 
         throw new ArgumentException($"'{wireValue}' is not a known card action.", nameof(wireValue));
+    }
+}
+
+/// <summary>
+/// Writes <see cref="CardActionKind"/> as its stable wire string and reads both wire
+/// strings and legacy enum names/numbers. Unknown values produce an undefined enum
+/// value, which <see cref="OsokoSettings.Normalize"/> replaces with the property's
+/// documented default.
+/// </summary>
+public sealed class CardActionKindJsonConverter : JsonConverter<CardActionKind>
+{
+    /// <summary>Undefined sentinel returned for unparseable JSON values.</summary>
+    internal static CardActionKind InvalidValue => (CardActionKind)(-1);
+
+    /// <summary>Allows JSON <c>null</c> to fall back to the per-property default.</summary>
+    public override bool HandleNull => true;
+
+    public override CardActionKind Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.String:
+                return CardActionKindExtensions.TryParseWireValue(reader.GetString(), out var parsed)
+                    ? parsed
+                    : InvalidValue;
+
+            case JsonTokenType.Number when reader.TryGetInt32(out var numeric):
+                var candidate = (CardActionKind)numeric;
+                return Enum.IsDefined(candidate) ? candidate : InvalidValue;
+
+            case JsonTokenType.Null:
+                return InvalidValue;
+
+            default:
+                // Be forgiving: a single malformed setting must not discard the rest
+                // of the settings file. Consume the token so deserialization continues.
+                reader.Skip();
+                return InvalidValue;
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, CardActionKind value, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        // Undefined values should never reach disk, but a tolerant write keeps a
+        // hand-edited/in-memory invalid value from crashing the save path.
+        writer.WriteStringValue(Enum.IsDefined(value)
+            ? value.ToWireValue()
+            : CardActionKind.None.ToWireValue());
     }
 }

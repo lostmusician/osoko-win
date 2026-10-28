@@ -29,6 +29,13 @@ public sealed class OsokoSettings : INotifyPropertyChanged
     private bool _cleanPicturesFolder = true;
     private bool _captureClipboardFromAnyApp;
     private bool _enableGlobalHotkey;
+    private CardActionKind _topActionSlot1 = CardActionKind.SaveToFolder;
+    private CardActionKind _topActionSlot2 = CardActionKind.Pin;
+    private CardActionKind _bottomActionSlot1 = CardActionKind.CopyDownscaled;
+    private CardActionKind _bottomActionSlot2 = CardActionKind.Share;
+    private CardActionKind _primaryClickAction = CardActionKind.CopyOriginal;
+    private CardActionKind _doubleClickAction = CardActionKind.OpenInPreview;
+    private bool _enableHoverShortcuts = true;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -140,6 +147,55 @@ public sealed class OsokoSettings : INotifyPropertyChanged
         set => Set(ref _enableGlobalHotkey, value);
     }
 
+    /// <summary>Top-left action slot on a screenshot card.</summary>
+    public CardActionKind TopActionSlot1
+    {
+        get => _topActionSlot1;
+        set => Set(ref _topActionSlot1, NormalizeAction(value, CardActionKind.SaveToFolder));
+    }
+
+    /// <summary>Top-right action slot on a screenshot card.</summary>
+    public CardActionKind TopActionSlot2
+    {
+        get => _topActionSlot2;
+        set => Set(ref _topActionSlot2, NormalizeAction(value, CardActionKind.Pin));
+    }
+
+    /// <summary>Bottom-left action slot on a screenshot card.</summary>
+    public CardActionKind BottomActionSlot1
+    {
+        get => _bottomActionSlot1;
+        set => Set(ref _bottomActionSlot1, NormalizeAction(value, CardActionKind.CopyDownscaled));
+    }
+
+    /// <summary>Bottom-right action slot on a screenshot card.</summary>
+    public CardActionKind BottomActionSlot2
+    {
+        get => _bottomActionSlot2;
+        set => Set(ref _bottomActionSlot2, NormalizeAction(value, CardActionKind.Share));
+    }
+
+    /// <summary>Action performed by a primary click on a card.</summary>
+    public CardActionKind PrimaryClickAction
+    {
+        get => _primaryClickAction;
+        set => Set(ref _primaryClickAction, NormalizeAction(value, CardActionKind.CopyOriginal));
+    }
+
+    /// <summary>Action performed by a double click on a card.</summary>
+    public CardActionKind DoubleClickAction
+    {
+        get => _doubleClickAction;
+        set => Set(ref _doubleClickAction, NormalizeAction(value, CardActionKind.OpenInPreview));
+    }
+
+    /// <summary>Enable hover gestures and shortcut badges on cards.</summary>
+    public bool EnableHoverShortcuts
+    {
+        get => _enableHoverShortcuts;
+        set => Set(ref _enableHoverShortcuts, value);
+    }
+
     /// <summary>Creates a settings instance with production defaults.</summary>
     public static OsokoSettings CreateDefault() => new()
     {
@@ -152,6 +208,16 @@ public sealed class OsokoSettings : INotifyPropertyChanged
         AutoCollapseDelaySeconds = Math.Clamp(AutoCollapseDelaySeconds, MinCollapseDelaySeconds, MaxCollapseDelaySeconds);
         MaxStackItems = Math.Clamp(MaxStackItems, MinStackItemCount, MaxStackItemCount);
 
+        // Unknown persisted action strings arrive as an undefined enum value; restore
+        // the documented default for that specific slot without discarding the rest
+        // of the settings file.
+        TopActionSlot1 = NormalizeAction(TopActionSlot1, CardActionKind.SaveToFolder);
+        TopActionSlot2 = NormalizeAction(TopActionSlot2, CardActionKind.Pin);
+        BottomActionSlot1 = NormalizeAction(BottomActionSlot1, CardActionKind.CopyDownscaled);
+        BottomActionSlot2 = NormalizeAction(BottomActionSlot2, CardActionKind.Share);
+        PrimaryClickAction = NormalizeAction(PrimaryClickAction, CardActionKind.CopyOriginal);
+        DoubleClickAction = NormalizeAction(DoubleClickAction, CardActionKind.OpenInPreview);
+
         if (string.IsNullOrWhiteSpace(SaveLocationPath))
         {
             SaveLocationPath = AppPaths.DesktopDirectory;
@@ -161,6 +227,7 @@ public sealed class OsokoSettings : INotifyPropertyChanged
     /// <summary>Deep copy used by the settings dialog so edits can be cancelled.</summary>
     public OsokoSettings Clone()
     {
+        // MemberwiseClone copies every backing field, including the action slots.
         var clone = (OsokoSettings)MemberwiseClone();
         clone.PropertyChanged = null;
         return clone;
@@ -186,7 +253,17 @@ public sealed class OsokoSettings : INotifyPropertyChanged
         CleanPicturesFolder = other.CleanPicturesFolder;
         CaptureClipboardFromAnyApp = other.CaptureClipboardFromAnyApp;
         EnableGlobalHotkey = other.EnableGlobalHotkey;
+        TopActionSlot1 = other.TopActionSlot1;
+        TopActionSlot2 = other.TopActionSlot2;
+        BottomActionSlot1 = other.BottomActionSlot1;
+        BottomActionSlot2 = other.BottomActionSlot2;
+        PrimaryClickAction = other.PrimaryClickAction;
+        DoubleClickAction = other.DoubleClickAction;
+        EnableHoverShortcuts = other.EnableHoverShortcuts;
     }
+
+    private static CardActionKind NormalizeAction(CardActionKind value, CardActionKind fallback) =>
+        Enum.IsDefined(value) ? value : fallback;
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
